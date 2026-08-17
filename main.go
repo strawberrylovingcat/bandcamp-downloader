@@ -12,18 +12,28 @@ import (
 
 /*
 TODO
-1. Добавить указание директории для сохранения файлов
-2. Добавить указание прогресса скачивания
-3. Добавить параллельную загрузку файлов
-4. Заполнение метаданных файлов
+1. Добавить указание прогресса скачивания
+2. Добавить параллельную загрузку файлов
+3. Заполнение метаданных файлов
 */
 func main() {
 	var urlVar string
+	var pathVar string
 	flag.StringVar(&urlVar, "url", "", "Link to download")
+	flag.StringVar(&pathVar, "path", "", "Path for downloaded files. Default is working directory")
 	flag.Parse()
 
 	if "" == urlVar {
 		panic("No url was passed")
+	}
+
+	if "" == pathVar {
+		tempPathVar, err := os.Getwd()
+
+		if err != nil {
+			panic(err)
+		}
+		pathVar = tempPathVar
 	}
 	response, err := http.Get(urlVar)
 	defer response.Body.Close()
@@ -40,14 +50,18 @@ func main() {
 	if err := json.Unmarshal([]byte(pageData), &tracksRes); nil != err {
 		panic(err)
 	}
-	homeDir, err := os.UserHomeDir()
 
-	if err != nil {
+	for _, pack := range tracksRes.Packages {
+		if pack.AlbumId == tracksRes.Current.Id {
+			pathVar += "/" + pack.DownloadArtist + "/" + pack.DownloadTitle
+		}
+	}
+	if err := os.MkdirAll(pathVar, 0755); nil != err {
 		panic(err)
 	}
 
 	for _, trackElement := range tracksRes.Tracks {
-		file, err := os.Create(homeDir + "/" + trackElement.Title + ".mp3")
+		file, err := os.Create(pathVar + "/" + trackElement.Title + ".mp3")
 		defer file.Close()
 
 		if err != nil {
@@ -65,12 +79,14 @@ func main() {
 }
 
 type tracksResponse struct {
-	Current current `json:"current"`
-	Tracks  []track `json:"trackinfo"`
+	Current  current        `json:"current"`
+	Tracks   []track        `json:"trackinfo"`
+	Packages []musicPackage `json:"packages"`
 }
 
 type current struct {
 	Title string `json:"title"`
+	Id    int    `json:"id"`
 }
 
 type track struct {
@@ -80,4 +96,10 @@ type track struct {
 
 type trackFile struct {
 	Url string `json:"mp3-128"`
+}
+
+type musicPackage struct {
+	AlbumId        int    `json:"album_id"`
+	DownloadTitle  string `json:"download_title"`
+	DownloadArtist string `json:"download_artist"`
 }
